@@ -31,7 +31,7 @@ from aiogram.types import (
 # SOZLAMALAR
 # ─────────────────────────────────────────────
 
-API_TOKEN          = "8829983191:AAFYyNiSKHZRuZJxZW9sc3hzFB39eGT9OSY"
+API_TOKEN          = "8915709874:AAERluS-bMcimBDFoTTK9EtYHVFc-mMjP2k"
 ADMIN_ID           = 8314283278
 DB_PATH            = "faylmaster.db"
 
@@ -1406,22 +1406,117 @@ async def tarix_handler(message: Message) -> None:
 
 @dp.message(F.text == "❓ Yordam")
 async def yordam_handler(message: Message) -> None:
+    """Har bir tugma haqida batafsil tushuntirish."""
     user = user_olish(message.from_user.id)
     narx = sozlama_olish("konvertatsiya_narx")
+
+    # 1-xabar: Fayl yuborish va asosiy tushuntirish
     await message.answer(
-        "❓ <b>FaylMasterBot v3.0</b>\n\n"
-        f"💎 Yangi user: {BOSHLANGICH_OLMOS} olmos\n"
-        f"📁 1 konvertatsiya: {narx} olmos\n"
-        f"🎁 Kunlik bonus: +{KUNLIK_BONUS} olmos\n"
-        f"🔥 7 kun streak: +2 olmos/kun\n"
-        f"🔥 30 kun streak: +3 olmos/kun\n"
-        f"👥 Referal: +{REFERAL_OLMOS} olmos/do'st\n"
-        f"🎀 Sovg'a: do'stga olmos yuboring\n"
-        f"👑 VIP: {VIP_CHEGARA}+ olmos\n"
-        f"📋 Vazifalar: admin tomonidan\n"
-        f"🌐 Tarjima: istalgan tildan o'zbekcha\n"
-        f"💬 Feedback: taklif va shikoyatlar",
-        reply_markup=asosiy_menyu(user), parse_mode="HTML"
+        "❓ <b>FaylMasterBot — To'liq qo'llanma</b>\n\n"
+
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "📁 <b>FAYL YUBORISH</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "1️⃣ «📁 Fayl yuborish» tugmasini bosing\n"
+        "2️⃣ Istalgan faylingizni (rasm, hujjat va h.k.) botga yuboring\n"
+        "3️⃣ Bot faylni qayta ishlab sizga qaytaradi\n"
+        f"💡 Har bir fayl yuborish = <b>{narx} olmos</b> sarflaydi\n\n"
+
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "💎 <b>OLMOS TIZIMI</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"• Botga birinchi kirsangiz: <b>{BOSHLANGICH_OLMOS} olmos</b> sovg'a\n"
+        f"• Maksimal saqlash: <b>{MAX_OLMOS} olmos</b>\n"
+        f"• Fayl yuborish narxi: <b>{narx} olmos</b>\n"
+        f"• Olmos tugasa → <b>Qariz olish</b> mumkin (+{QARIZ_MIQDORI} olmos)",
+        parse_mode="HTML"
+    )
+
+    # 2-xabar: Bonus va referal
+    await message.answer(
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🎁 <b>KUNLIK BONUS</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "• Har kuni «🎁 Kunlik bonus» tugmasini bosing\n"
+        f"• Oddiy: <b>+{KUNLIK_BONUS} olmos</b>\n"
+        "• 7 kun ketma-ket: <b>+2 olmos</b> 🔥\n"
+        "• 30 kun ketma-ket: <b>+3 olmos</b> 💫\n\n"
+
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "👥 <b>REFERAL TIZIMI</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "1️⃣ «👥 Referal» tugmasini bosing\n"
+        "2️⃣ Shaxsiy havolangizni oling\n"
+        "3️⃣ Do'stlaringizga yuboring\n"
+        f"4️⃣ Do'st qo'shilganda: <b>+{REFERAL_OLMOS} olmos</b> olasiz\n\n"
+
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🎀 <b>SOVG'A YUBORISH</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "1️⃣ «🎀 Sovg'a yuborish» tugmasini bosing\n"
+        "2️⃣ Do'stingizning Telegram ID sini kiriting\n"
+        "3️⃣ Necha olmos yuborishni kiriting\n"
+        "✅ Olmos darhol do'stingizga o'tadi",
+        parse_mode="HTML"
+    )
+
+    # 3-xabar: Keshbek, VIP, Vazifalar
+    await message.answer(
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "💰 <b>KESHBEK OLISH</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "1️⃣ <b>HisobchiXuzbot</b> da xarajat kiriting\n"
+        "2️⃣ Bot sizga maxsus kod beradi\n"
+        "3️⃣ «💰 Keshbek olish» tugmasini bosing\n"
+        "4️⃣ Kodni kiriting → balansga olmos qo'shiladi\n"
+        "⚠️ Kod faqat <b>48 soat</b> amal qiladi!\n\n"
+
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "👑 <b>VIP STATUS</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"• {VIP_CHEGARA} va undan ko'p olmos to'plasangiz — <b>VIP</b> bo'lasiz\n"
+        "• VIP belgisi: 👑\n"
+        "• Fayl yuborishda chegirma olasiz\n\n"
+
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "📋 <b>VAZIFALAR</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "1️⃣ «📋 Vazifalar» tugmasini bosing\n"
+        "2️⃣ Admin bergan vazifani o'qing\n"
+        "3️⃣ Vazifani bajaring\n"
+        "4️⃣ «✅ Bajardim» tugmasini bosing\n"
+        "5️⃣ Admin tekshiradi → olmos hisoblaydi\n"
+        f"⏰ Har bir vazifa <b>{VAZIFA_MUDDAT} soat</b> ichida bajarilishi kerak!",
+        parse_mode="HTML"
+    )
+
+    # 4-xabar: Qolgan funksiyalar
+    await message.answer(
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🌐 <b>TARJIMA</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "1️⃣ «🌐 Tarjima» tugmasini bosing\n"
+        "2️⃣ Tarjima qilmoqchi bo'lgan matnni yuboring\n"
+        "3️⃣ Bot istalgan tildan o'zbek tiliga tarjima qiladi\n\n"
+
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🏦 <b>QARIZ OLISH</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "• Balansiz 0 bo'lganda bu tugma chiqadi\n"
+        f"• Bosing → <b>+{QARIZ_MIQDORI} olmos</b> qarz olasiz\n"
+        "• Keyingi to'ldirishda qarz avtomatik to'lanadi\n"
+        "• Maksimal qarz: <b>3 olmos</b>\n\n"
+
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🏆 <b>BOSHQA TUGMALAR</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "• «🏆 Top reyting» — eng ko'p olmosli 10 kishi\n"
+        "• «👤 Profilim» — sizning to'liq statistikangiz\n"
+        "• «📊 Tarix» — oxirgi 10 ta konvertatsiya\n"
+        "• «💬 Feedback» — adminga taklif yoki shikoyat\n"
+        "• «💎 Balansim» — joriy olmos va qarz holati",
+        reply_markup=asosiy_menyu(user),
+        parse_mode="HTML"
     )
 
 
