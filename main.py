@@ -25,7 +25,7 @@ from aiogram.types import (
 # SOZLAMALAR
 # ─────────────────────────────────────────────
 
-API_TOKEN = "BU YERGA YANGI TOKENINGNI YOZASAN"
+API_TOKEN = "8829983191:AAFYyNiSKHZRuZJxZW9sc3hzFB39eGT9OSY"
 ADMIN_ID  = 8314283278
 DB_PATH   = "faylmaster.db"
 
