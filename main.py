@@ -46,6 +46,23 @@ SOVGA_MIN          = 1
 VIP_CHEGARA        = 50
 VAZIFA_MUDDAT      = 12    # soat
 
+# Majburiy obuna kanallari/botlar
+MAJBURIY_KANALLAR = [
+    {"id": "@soghlomlikuz_bot",  "nom": "Soghlomlik Bot",       "havola": "https://t.me/soghlomlikuz_bot"},
+    {"id": "@shzodbekcoderdev",  "nom": "Shahzodbek Coder Dev", "havola": "https://t.me/shzodbekcoderdev"},
+    {"id": "@sontopxbot",        "nom": "SonTopX Bot",          "havola": "https://t.me/sontopxbot"},
+    {"id": "@hisobchixuzbot",    "nom": "HisobchiXuz Bot",      "havola": "https://t.me/hisobchixuzbot"},
+]
+
+# Motivatsiyali xabarlar (3 kun kirmasa)
+MOTIVATSIYA_XABARLARI = [
+    "👋 Salom! Sizni sog'indik!\n\n💎 Kunlik bonusni unutmadingizmi?\nBugun ham fayl yuborib, olmos to'plang! 🚀",
+    "🔥 Streak'ingiz yo'qolmoqchi!\n\nHozir keling va kunlik bonusingizni oling.\n💎 Har kun = ko'proq olmos!",
+    "📁 FaylMasterBot sizni kutmoqda!\n\n🏆 Top reytingda o'z o'rningizni saqlab qoling.",
+    "💡 Bilasizmi?\n\nDo'stlaringizni taklif qilsangiz — har biri uchun +2 olmos olasiz!\n👥 Referal havolangizdan foydalaning!",
+    "🎯 Yangi vazifalar paydo bo'ldi!\n\n📋 Vazifalarni bajaring va olmos to'plang. 💎",
+]
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -100,6 +117,7 @@ def db_init() -> None:
             kunlik_bonus   TEXT    DEFAULT NULL,
             streak         INTEGER DEFAULT 0,
             oxirgi_fayl    TEXT    DEFAULT NULL,
+            oxirgi_kirish  TEXT    DEFAULT (datetime('now')),
             joined_at      TEXT    DEFAULT (datetime('now'))
         )
     """)
@@ -201,6 +219,64 @@ def referal_kod_yarat(user_id: int) -> str:
     conn.commit()
     conn.close()
     return kod
+
+
+def oxirgi_kirish_yangilash(user_id: int) -> None:
+    """Foydalanuvchi oxirgi kirish vaqtini yangilaydi."""
+    conn = sqlite3.connect(DB_PATH)
+    cur  = conn.cursor()
+    cur.execute(
+        "UPDATE users SET oxirgi_kirish = ? WHERE user_id = ?",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def uzoq_kirmagan_userlar(kunlar: int = 3) -> list:
+    """N kundan ko'p kirmaganlar ro'yxati."""
+    conn = sqlite3.connect(DB_PATH)
+    cur  = conn.cursor()
+    chegara = (datetime.now() - timedelta(days=kunlar)).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("""
+        SELECT user_id, full_name FROM users
+        WHERE oxirgi_kirish < ? OR oxirgi_kirish IS NULL
+    """, (chegara,))
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+async def obuna_tekshir(bot: Bot, user_id: int) -> list:
+    """
+    Foydalanuvchi barcha majburiy kanallarga obuna bo'lganini tekshiradi.
+    Obuna bo'lmagan kanallar ro'yxatini qaytaradi.
+    """
+    obuna_bolmagan = []
+    for kanal in MAJBURIY_KANALLAR:
+        try:
+            member = await bot.get_chat_member(kanal["id"], user_id)
+            if member.status in ("left", "kicked", "banned"):
+                obuna_bolmagan.append(kanal)
+        except Exception:
+            # Bot kanalda admin bo'lmasa yoki kanal topilmasa o'tkazib yuboradi
+            pass
+    return obuna_bolmagan
+
+
+def obuna_klaviatura(obuna_bolmagan: list) -> InlineKeyboardMarkup:
+    """Obuna bo'lmagan kanallar uchun tugmalar."""
+    tugmalar = []
+    for kanal in obuna_bolmagan:
+        tugmalar.append([InlineKeyboardButton(
+            text=f"✅ {kanal['nom']} ga obuna bo'lish",
+            url=kanal["havola"]
+        )])
+    tugmalar.append([InlineKeyboardButton(
+        text="🔄 Tekshirish",
+        callback_data="obuna_tekshir"
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=tugmalar)
 
 
 def user_register(user_id: int, username: str, full_name: str, referal_kimdan: int = None) -> bool:
@@ -730,8 +806,22 @@ async def start_handler(message: Message) -> None:
         if taklif and taklif["user_id"] != u.id:
             referal_kimdan = taklif["user_id"]
 
+    # Majburiy obuna tekshirish
+    obuna_bolmagan = await obuna_tekshir(bot, u.id)
+    if obuna_bolmagan:
+        await message.answer(
+            "⚠️ <b>Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:</b>\n\n"
+            "Obuna bo'lgandan so'ng «🔄 Tekshirish» tugmasini bosing.",
+            reply_markup=obuna_klaviatura(obuna_bolmagan),
+            parse_mode="HTML"
+        )
+        return
+
     yangi = user_register(u.id, u.username or "", u.full_name or "", referal_kimdan)
     user  = user_olish(u.id)
+
+    # Oxirgi kirish vaqtini yangilash
+    oxirgi_kirish_yangilash(u.id)
 
     if yangi:
         if referal_kimdan:
@@ -762,15 +852,64 @@ async def admin_buyruq(message: Message) -> None:
         await message.answer("❌ Ruxsat yo'q.")
         return
 
-    # Admin panelini ko'rsatish
-    await message.answer("🔐 <b>Admin paneli</b>", reply_markup=admin_menyu(), parse_mode="HTML")
+    # 1-xabar: Admin paneli + Bot umumiy ma'lumotlari
+    stat = admin_statistika()
+    narx = sozlama_olish("konvertatsiya_narx")
+    bot_info = await bot.get_me()
 
-    # Barcha foydalanuvchilarni chiqarish
+    await message.answer(
+        "🔐 <b>ADMIN PANELI</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🤖 <b>BOT MA'LUMOTLARI</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"📛 Nomi: <b>{bot_info.full_name}</b>\n"
+        f"🔗 Username: @{bot_info.username}\n"
+        f"🆔 Bot ID: <code>{bot_info.id}</code>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "📊 <b>STATISTIKA</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"👥 Jami foydalanuvchilar: <b>{stat['foydalanuvchilar']}</b>\n"
+        f"📁 Jami konvertatsiyalar: <b>{stat['konvertatsiyalar']}</b>\n"
+        f"👑 VIP foydalanuvchilar: <b>{stat['viplar']}</b>\n"
+        f"⚠️ Qarzdorlar: <b>{stat['qarzdorlar']}</b>\n"
+        f"💬 Feedbacklar: <b>{stat['feedbacklar']}</b>\n"
+        f"📋 Faol vazifalar: <b>{stat['vazifalar']}</b>\n"
+        f"💎 Jami olmos: <b>{stat['jami_olmos']}</b>\n"
+        f"💲 Konvertatsiya narxi: <b>{narx} olmos</b>",
+        reply_markup=admin_menyu(),
+        parse_mode="HTML"
+    )
+
+    # 2-xabar: Admin buyruqlari
+    await message.answer(
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "⚙️ <b>ADMIN BUYRUQLARI</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "👥 <b>Statistika</b>\n"
+        "   └ Bot umumiy statistikasini ko'rsatadi\n\n"
+        "💎 <b>Balans tahrirlash</b>\n"
+        "   └ Istalgan foydalanuvchi olmosini o'zgartirish\n"
+        "   └ User ID → Yangi miqdor kiriting\n\n"
+        "💲 <b>Narx o'zgartirish</b>\n"
+        "   └ Konvertatsiya narxini o'zgartirish\n"
+        "   └ Hozirgi narx: <b>{}</b> olmos\n\n"
+        "📢 <b>Hammaga xabar</b>\n"
+        "   └ Barcha foydalanuvchilarga broadcast\n"
+        "   └ Xabar yozing → hammaga ketadi\n\n"
+        "📋 <b>Vazifa qo'shish</b>\n"
+        "   └ Yangi vazifa yaratish\n"
+        "   └ Matn → Olmos miqdori → Barcha userlarga yuboriladi\n"
+        "   └ User 'Bajardim' bosadi → Adminga keladi\n"
+        "   └ Admin ✅Tasdiqlash yoki ❌Rad etish bosadi".format(narx),
+        parse_mode="HTML"
+    )
+
+    # 3-xabar: Barcha foydalanuvchilar
     conn = sqlite3.connect(DB_PATH)
     cur  = conn.cursor()
     cur.execute("""
-        SELECT user_id, full_name, username, olmos, qariz, joined_at
-        FROM users ORDER BY joined_at DESC
+        SELECT user_id, full_name, username, olmos, qariz, streak, joined_at
+        FROM users ORDER BY olmos DESC
     """)
     rows = cur.fetchall()
     conn.close()
@@ -779,18 +918,28 @@ async def admin_buyruq(message: Message) -> None:
         await message.answer("📭 Hozircha foydalanuvchi yo'q.")
         return
 
-    # Har 10 ta userdan bir xabar (Telegram limit uchun)
+    await message.answer(
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👥 <b>BARCHA FOYDALANUVCHILAR ({len(rows)} ta)</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━",
+        parse_mode="HTML"
+    )
+
+    # Har 10 tadan yuborish
     for i in range(0, len(rows), 10):
-        qism = rows[i:i+10]
-        qatorlar = [f"👥 <b>Foydalanuvchilar ({i+1}-{i+len(qism)}):</b>\n"]
-        for user_id, full_name, username, olmos, qariz, joined in qism:
-            vip_b    = "👑" if olmos >= VIP_CHEGARA else ""
-            qariz_b  = f"⚠️{qariz}" if qariz > 0 else ""
-            uname    = f"@{username}" if username else "—"
+        qism     = rows[i:i+10]
+        qatorlar = [f"📋 <b>{i+1}-{i+len(qism)}:</b>\n"]
+        for uid, full_name, username, olmos, qariz, streak, joined in qism:
+            vip_b   = "👑" if olmos >= VIP_CHEGARA else "👤"
+            qariz_b = f" | ⚠️Qarz: {qariz}" if qariz > 0 else ""
+            uname   = f"@{username}" if username else "username yo'q"
+            sana    = joined[:10] if joined else "—"
             qatorlar.append(
-                f"{vip_b} <b>{full_name}</b> {qariz_b}\n"
-                f"   🆔 <code>{user_id}</code>\n"
-                f"   👤 {uname} | 💎 {olmos} olmos"
+                f"{vip_b} <b>{full_name}</b>\n"
+                f"   🆔 <code>{uid}</code>\n"
+                f"   👤 {uname}\n"
+                f"   💎 {olmos} olmos | 🔥 {streak} streak{qariz_b}\n"
+                f"   📅 {sana}"
             )
         await message.answer("\n\n".join(qatorlar), parse_mode="HTML")
         await asyncio.sleep(0.3)
@@ -1720,6 +1869,76 @@ async def notanish(message: Message, state: FSMContext) -> None:
     await message.answer("🤔 Tushunmadim.", reply_markup=asosiy_menyu(user))
 
 
+@dp.callback_query(F.data == "obuna_tekshir")
+async def obuna_tekshir_callback(callback: CallbackQuery) -> None:
+    """Foydalanuvchi 'Tekshirish' tugmasini bosdi — obunani qayta tekshiradi."""
+    user_id = callback.from_user.id
+    u       = callback.from_user
+
+    obuna_bolmagan = await obuna_tekshir(bot, user_id)
+
+    if obuna_bolmagan:
+        await callback.answer("❌ Hali obuna bo'lmagan kanallar bor!", show_alert=True)
+        await callback.message.edit_reply_markup(
+            reply_markup=obuna_klaviatura(obuna_bolmagan)
+        )
+        return
+
+    # Obuna bo'ldi — botga kirish
+    await callback.answer("✅ Rahmat! Barcha kanallarga obuna bo'ldingiz!", show_alert=True)
+
+    yangi = user_register(u.id, u.username or "", u.full_name or "")
+    user  = user_olish(u.id)
+    oxirgi_kirish_yangilash(u.id)
+
+    if yangi:
+        xabar = (
+            f"🎉 <b>Xush kelibsiz, {u.full_name}!</b>\n\n"
+            f"🎁 Sizga <b>{BOSHLANGICH_OLMOS} olmos</b> sovg'a!\n"
+            "📁 FaylMasterBot — fayllarni konvertatsiya qiluvchi bot."
+        )
+    else:
+        vip_m = " 👑 VIP" if vip_mi(user["olmos"]) else ""
+        xabar = f"👋 Qaytib keldingiz, <b>{u.full_name}</b>{vip_m}!"
+
+    await callback.message.answer(xabar, reply_markup=asosiy_menyu(user), parse_mode="HTML")
+
+
+# ─────────────────────────────────────────────
+# MOTIVATSIYA SCHEDULER
+# ─────────────────────────────────────────────
+
+async def motivatsiya_yuborish() -> None:
+    """
+    Har 6 soatda bir marta tekshiradi:
+    3 kun kirmagan foydalanuvchilarga motivatsiyali xabar yuboradi.
+    """
+    while True:
+        try:
+            await asyncio.sleep(6 * 3600)  # 6 soat kutadi
+            uzoq_kirmagan = uzoq_kirmagan_userlar(kunlar=3)
+
+            if not uzoq_kirmagan:
+                continue
+
+            logger.info(f"Motivatsiya: {len(uzoq_kirmagan)} ta foydalanuvchiga xabar yuborilmoqda")
+
+            for user_id, full_name in uzoq_kirmagan:
+                xabar = random.choice(MOTIVATSIYA_XABARLARI)
+                try:
+                    await bot.send_message(
+                        user_id,
+                        f"💌 <b>Salom, {full_name}!</b>\n\n{xabar}",
+                        parse_mode="HTML"
+                    )
+                    await asyncio.sleep(0.1)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            logger.error(f"Motivatsiya xatosi: {e}")
+            await asyncio.sleep(60)
+
 # ─────────────────────────────────────────────
 # ASOSIY ISHGA TUSHIRISH
 # ─────────────────────────────────────────────
@@ -1727,6 +1946,8 @@ async def notanish(message: Message, state: FSMContext) -> None:
 async def main() -> None:
     db_init()
     logger.info("FaylMasterBot v3.0 ishga tushdi ✅")
+    # Motivatsiya schedulerni parallel ishga tushirish
+    asyncio.create_task(motivatsiya_yuborish())
     await dp.start_polling(bot, skip_updates=True)
 
 
